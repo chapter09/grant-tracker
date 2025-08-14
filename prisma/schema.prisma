@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./grants.db"
+}
+
+model Grant {
+  id          String    @id @default(cuid())
+  title       String
+  agency      String    // NSF, NIH, etc.
+  number      String    @unique // Grant number
+  totalAmount Float
+  startDate   DateTime
+  endDate     DateTime
+  description String?
+  status      String    @default("Active") // Active, Completed, Cancelled
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  expenses    Expense[]
+  
+  @@map("grants")
+}
+
+model Expense {
+  id          String    @id @default(cuid())
+  description String
+  amount      Float
+  category    String    // Personnel, Equipment, Travel, etc.
+  date        DateTime
+  receipt     String?   // File path to receipt image
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  grantId     String
+  grant       Grant     @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  
+  @@map("expenses")
+}

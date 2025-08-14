@@ -1,0 +1,220 @@
+import { app, BrowserWindow, ipcMain } from 'electron'
+import path from 'path'
+import fs from 'fs'
+
+let mainWindow: BrowserWindow
+
+const createWindow = () => {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  })
+
+  if (process.env.NODE_ENV === 'development') {
+    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.webContents.openDevTools()
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+  }
+}
+
+const dataPath = path.join(app.getPath('userData'), 'grants-data.json')
+
+// Initialize data storage
+const initializeData = () => {
+  if (!fs.existsSync(dataPath)) {
+    fs.writeFileSync(dataPath, JSON.stringify({ grants: [], expenses: [] }, null, 2))
+  }
+}
+
+const readData = () => {
+  try {
+    const data = fs.readFileSync(dataPath, 'utf8')
+    return JSON.parse(data)
+  } catch (error) {
+    return { grants: [], expenses: [] }
+  }
+}
+
+const writeData = (data: any) => {
+  fs.writeFileSync(dataPath, JSON.stringify(data, null, 2))
+}
+
+app.whenReady().then(() => {
+  initializeData()
+  createWindow()
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
+
+// Helper function to generate IDs
+const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36)
+
+// IPC handlers for database operations
+ipcMain.handle('grants:getAll', () => {
+  const data = readData()
+  return data.grants.map((grant: any) => ({
+    ...grant,
+    expenses: data.expenses.filter((exp: any) => exp.grantId === grant.id)
+  }))
+})
+
+ipcMain.handle('grants:create', (_, grantData) => {
+  const data = readData()
+  const newGrant = {
+    ...grantData,
+    id: generateId(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+  data.grants.push(newGrant)
+  writeData(data)
+  return newGrant
+})
+
+ipcMain.handle('grants:update', (_, id, grantData) => {
+  const data = readData()
+  const grantIndex = data.grants.findIndex((g: any) => g.id === id)
+  if (grantIndex >= 0) {
+    data.grants[grantIndex] = {
+      ...data.grants[grantIndex],
+      ...grantData,
+      updatedAt: new Date().toISOString()
+    }
+    writeData(data)
+    return data.grants[grantIndex]
+  }
+  throw new Error('Grant not found')
+})
+
+ipcMain.handle('grants:delete', (_, id) => {
+  const data = readData()
+  const grantIndex = data.grants.findIndex((g: any) => g.id === id)
+  if (grantIndex >= 0) {
+    const deletedGrant = data.grants[grantIndex]
+    data.grants.splice(grantIndex, 1)
+    // Also delete associated expenses
+    data.expenses = data.expenses.filter((exp: any) => exp.grantId !== id)
+    writeData(data)
+    return deletedGrant
+  }
+  throw new Error('Grant not found')
+})
+
+ipcMain.handle('expenses:create', (_, expenseData) => {
+  const data = readData()
+  const newExpense = {
+    ...expenseData,
+    id: generateId(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+  data.expenses.push(newExpense)
+  writeData(data)
+  return newExpense
+})
+
+ipcMain.handle('expenses:update', (_, id, expenseData) => {
+  const data = readData()
+  const expenseIndex = data.expenses.findIndex((e: any) => e.id === id)
+  if (expenseIndex >= 0) {
+    data.expenses[expenseIndex] = {
+      ...data.expenses[expenseIndex],
+      ...expenseData,
+      updatedAt: new Date().toISOString()
+    }
+    writeData(data)
+    return data.expenses[expenseIndex]
+  }
+  throw new Error('Expense not found')
+})
+
+ipcMain.handle('expenses:delete', (_, id) => {
+  const data = readData()
+  const expenseIndex = data.expenses.findIndex((e: any) => e.id === id)
+  if (expenseIndex >= 0) {
+    const deletedExpense = data.expenses[expenseIndex]
+    data.expenses.splice(expenseIndex, 1)
+    writeData(data)
+    return deletedExpense
+  }
+  throw new Error('Expense not found')
+})
+
+ipcMain.handle('expenses:getByDateRange', (_, startDate, endDate, grantIds?) => {
+  const data = readData()
+  const grants = data.grants.reduce((acc: any, grant: any) => {
+    acc[grant.id] = grant
+    return acc
+  }, {})
+  
+  return data.expenses
+    .filter((expense: any) => {
+      const expenseDate = new Date(expense.date)
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      const dateInRange = expenseDate >= start && expenseDate <= end
+      const grantMatch = !grantIds || grantIds.includes(expense.grantId)
+      return dateInRange && grantMatch
+    })
+    .map((expense: any) => ({
+      ...expense,
+      grant: grants[expense.grantId] || null
+    }))
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+})
+
+// Budget import handlers
+ipcMain.handle('budget:import', (_, grantId, budgetCategories) => {
+  const data = readData()
+  const grantIndex = data.grants.findIndex((g: any) => g.id === grantId)
+  
+  if (grantIndex >= 0) {
+    if (!data.grants[grantIndex].budgetCategories) {
+      data.grants[grantIndex].budgetCategories = []
+    }
+    
+    data.grants[grantIndex].budgetCategories = budgetCategories.map((category: any) => ({
+      ...category,
+      id: generateId(),
+      createdAt: new Date().toISOString()
+    }))
+    
+    data.grants[grantIndex].updatedAt = new Date().toISOString()
+    writeData(data)
+    return data.grants[grantIndex].budgetCategories
+  }
+  
+  throw new Error('Grant not found')
+})
+
+ipcMain.handle('budget:get', (_, grantId) => {
+  const data = readData()
+  const grant = data.grants.find((g: any) => g.id === grantId)
+  return grant?.budgetCategories || []
+})
+
+ipcMain.handle('budget:update', (_, grantId, budgetCategories) => {
+  const data = readData()
+  const grantIndex = data.grants.findIndex((g: any) => g.id === grantId)
+  
+  if (grantIndex >= 0) {
+    data.grants[grantIndex].budgetCategories = budgetCategories
+    data.grants[grantIndex].updatedAt = new Date().toISOString()
+    writeData(data)
+    return data.grants[grantIndex].budgetCategories
+  }
+  
+  throw new Error('Grant not found')
+})
