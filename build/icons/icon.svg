@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:0.95" />
+      <stop offset="100%" style="stop-color:#F3F4F6;stop-opacity:0.85" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <circle cx="256" cy="256" r="240" fill="url(#backgroundGradient)" stroke="#1E1B4B" stroke-width="8"/>
+  
+  <!-- Dollar sign background circle -->
+  <circle cx="256" cy="200" r="80" fill="url(#iconGradient)" stroke="#4F46E5" stroke-width="4"/>
+  
+  <!-- Dollar sign -->
+  <text x="256" y="230" font-family="Arial, sans-serif" font-size="80" font-weight="bold" 
+        text-anchor="middle" fill="#4F46E5">$</text>
+  
+  <!-- Chart bars representing analytics -->
+  <rect x="120" y="320" width="30" height="60" fill="url(#iconGradient)" rx="4"/>
+  <rect x="170" y="300" width="30" height="80" fill="url(#iconGradient)" rx="4"/>
+  <rect x="220" y="280" width="30" height="100" fill="url(#iconGradient)" rx="4"/>
+  <rect x="270" y="290" width="30" height="90" fill="url(#iconGradient)" rx="4"/>
+  <rect x="320" y="310" width="30" height="70" fill="url(#iconGradient)" rx="4"/>
+  <rect x="370" y="330" width="30" height="50" fill="url(#iconGradient)" rx="4"/>
+  
+  <!-- Grant document icon -->
+  <rect x="80" y="100" width="60" height="80" fill="url(#iconGradient)" rx="8" stroke="#4F46E5" stroke-width="2"/>
+  <line x1="90" y1="120" x2="130" y2="120" stroke="#4F46E5" stroke-width="3"/>
+  <line x1="90" y1="135" x2="120" y2="135" stroke="#4F46E5" stroke-width="2"/>
+  <line x1="90" y1="150" x2="125" y2="150" stroke="#4F46E5" stroke-width="2"/>
+  <line x1="90" y1="165" x2="115" y2="165" stroke="#4F46E5" stroke-width="2"/>
+  
+  <!-- Excel/spreadsheet icon -->
+  <rect x="370" y="100" width="60" height="80" fill="url(#iconGradient)" rx="8" stroke="#10B981" stroke-width="2"/>
+  <line x1="370" y1="125" x2="430" y2="125" stroke="#10B981" stroke-width="2"/>
+  <line x1="370" y1="145" x2="430" y2="145" stroke="#10B981" stroke-width="2"/>
+  <line x1="370" y1="165" x2="430" y2="165" stroke="#10B981" stroke-width="2"/>
+  <line x1="390" y1="100" x2="390" y2="180" stroke="#10B981" stroke-width="2"/>
+  <line x1="410" y1="100" x2="410" y2="180" stroke="#10B981" stroke-width="2"/>
+  
+  <!-- Title text -->
+  <text x="256" y="450" font-family="Arial, sans-serif" font-size="32" font-weight="bold" 
+        text-anchor="middle" fill="white">GRANT</text>
+  <text x="256" y="480" font-family="Arial, sans-serif" font-size="24" font-weight="normal" 
+        text-anchor="middle" fill="white">TRACKER</text>
+</svg>
