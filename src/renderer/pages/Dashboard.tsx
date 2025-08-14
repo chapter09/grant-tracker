@@ -23,6 +23,7 @@ interface Expense {
 export default function Dashboard() {
   const [grants, setGrants] = useState<Grant[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState({
     start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
@@ -33,21 +34,28 @@ export default function Dashboard() {
   }, [dateRange])
 
   const loadData = async () => {
+    setLoading(true)
     try {
       const [grantsData, expensesData] = await Promise.all([
         window.electronAPI.grants.getAll(),
         window.electronAPI.expenses.getByDateRange(dateRange.start, dateRange.end)
       ])
-      setGrants(grantsData)
-      setExpenses(expensesData)
+      console.log('Loaded grants:', grantsData)
+      console.log('Loaded expenses:', expensesData)
+      setGrants(grantsData || [])
+      setExpenses(expensesData || [])
     } catch (error) {
       console.error('Failed to load data:', error)
+      setGrants([])
+      setExpenses([])
+    } finally {
+      setLoading(false)
     }
   }
 
   const totalBudget = grants.reduce((sum, grant) => sum + grant.totalAmount, 0)
   const totalSpent = grants.reduce((sum, grant) => 
-    sum + grant.expenses.reduce((expSum, exp) => expSum + exp.amount, 0), 0)
+    sum + (grant.expenses || []).reduce((expSum, exp) => expSum + exp.amount, 0), 0)
   
   const activeGrants = grants.filter(g => g.status === 'Active').length
 
@@ -152,37 +160,56 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {grants.slice(0, 5).map((grant) => {
-                const spent = grant.expenses.reduce((sum, exp) => sum + exp.amount, 0)
-                return (
-                  <tr key={grant.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {grant.title}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{grant.agency}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      ${grant.totalAmount.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      ${spent.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        grant.status === 'Active' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {grant.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600">
-                      <Link to={`/grants/${grant.id}`} className="hover:underline">
-                        View Details
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    Loading grants...
+                  </td>
+                </tr>
+              ) : grants.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    <div className="space-y-2">
+                      <p>No grants found</p>
+                      <Link to="/grants" className="text-blue-600 hover:underline">
+                        Add your first grant →
                       </Link>
-                    </td>
-                  </tr>
-                )
-              })}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                grants.slice(0, 5).map((grant) => {
+                  const spent = (grant.expenses || []).reduce((sum, exp) => sum + exp.amount, 0)
+                  return (
+                    <tr key={grant.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {grant.title}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{grant.agency}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${grant.totalAmount.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${spent.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          grant.status === 'Active' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {grant.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600">
+                        <Link to={`/grants/${grant.id}`} className="hover:underline">
+                          View Details
+                        </Link>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
