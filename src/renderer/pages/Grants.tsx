@@ -36,19 +36,28 @@ export default function Grants() {
   const loadGrants = async () => {
     try {
       const data = await window.electronAPI.grants.getAll()
-      setGrants(data)
+      console.log('Loaded grants:', data)
+      setGrants(data || [])
     } catch (error) {
       console.error('Failed to load grants:', error)
+      setGrants([])
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    console.log('Submitting grant form with data:', formData)
+    
     try {
-      await window.electronAPI.grants.create({
+      const grantToCreate = {
         ...formData,
         totalAmount: parseFloat(formData.totalAmount)
-      })
+      }
+      console.log('Processed grant data:', grantToCreate)
+      
+      const result = await window.electronAPI.grants.create(grantToCreate)
+      console.log('Grant creation result:', result)
+      
       setFormData({
         title: '',
         agency: '',
@@ -61,8 +70,10 @@ export default function Grants() {
       })
       setShowForm(false)
       loadGrants()
+      alert('Grant created successfully!')
     } catch (error) {
       console.error('Failed to create grant:', error)
+      alert('Failed to create grant: ' + (error as Error).message)
     }
   }
 

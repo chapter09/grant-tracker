@@ -46,6 +46,7 @@ const writeData = (data: any) => {
 }
 
 app.whenReady().then(() => {
+  console.log('App ready, data path:', dataPath)
   initializeData()
   createWindow()
 
@@ -63,24 +64,47 @@ const generateId = () => Math.random().toString(36).substring(2) + Date.now().to
 
 // IPC handlers for database operations
 ipcMain.handle('grants:getAll', () => {
-  const data = readData()
-  return data.grants.map((grant: any) => ({
-    ...grant,
-    expenses: data.expenses.filter((exp: any) => exp.grantId === grant.id)
-  }))
+  console.log('IPC: grants:getAll called')
+  try {
+    const data = readData()
+    console.log('IPC: Data loaded for getAll:', data)
+    
+    const grantsWithExpenses = data.grants.map((grant: any) => ({
+      ...grant,
+      expenses: data.expenses.filter((exp: any) => exp.grantId === grant.id)
+    }))
+    console.log('IPC: Returning grants with expenses:', grantsWithExpenses)
+    
+    return grantsWithExpenses
+  } catch (error) {
+    console.error('IPC: Error getting grants:', error)
+    throw error
+  }
 })
 
 ipcMain.handle('grants:create', (_, grantData) => {
-  const data = readData()
-  const newGrant = {
-    ...grantData,
-    id: generateId(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+  console.log('IPC: grants:create called with data:', grantData)
+  try {
+    const data = readData()
+    console.log('IPC: Current data loaded:', data)
+    
+    const newGrant = {
+      ...grantData,
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    console.log('IPC: New grant created:', newGrant)
+    
+    data.grants.push(newGrant)
+    writeData(data)
+    console.log('IPC: Data written successfully')
+    
+    return newGrant
+  } catch (error) {
+    console.error('IPC: Error creating grant:', error)
+    throw error
   }
-  data.grants.push(newGrant)
-  writeData(data)
-  return newGrant
 })
 
 ipcMain.handle('grants:update', (_, id, grantData) => {
