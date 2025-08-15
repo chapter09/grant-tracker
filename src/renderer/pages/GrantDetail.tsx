@@ -41,18 +41,35 @@ export default function GrantDetail() {
   const [expenseForm, setExpenseForm] = useState({
     description: '',
     amount: '',
-    category: 'Personnel',
+    category: '',
     date: format(new Date(), 'yyyy-MM-dd'),
     notes: ''
   })
 
-  const categories = ['Personnel', 'Equipment', 'Travel', 'Supplies', 'Other']
+  // Get available categories from grant's budget categories (excluding indirect costs)
+  const getAvailableCategories = (): string[] => {
+    if (!grant?.budgetCategories) {
+      return ['PI Summer Salary', 'Student Summer Salary', 'Travel', 'Materials and Supplies', 'Publication Costs', 'Tuition']
+    }
+    return grant.budgetCategories
+      .filter(cat => cat.category !== 'Indirect Costs')
+      .map(cat => cat.category)
+  }
+  
+  const categories = getAvailableCategories()
 
   useEffect(() => {
     if (id) {
       loadGrant()
     }
   }, [id])
+
+  // Set default category when grant loads
+  useEffect(() => {
+    if (grant && categories.length > 0 && !expenseForm.category) {
+      setExpenseForm(prev => ({ ...prev, category: categories[0] }))
+    }
+  }, [grant, categories])
 
   const loadGrant = async () => {
     try {
@@ -77,7 +94,7 @@ export default function GrantDetail() {
       setExpenseForm({
         description: '',
         amount: '',
-        category: 'Personnel',
+        category: categories[0] || '',
         date: format(new Date(), 'yyyy-MM-dd'),
         notes: ''
       })
@@ -278,10 +295,15 @@ export default function GrantDetail() {
                   value={expenseForm.category}
                   onChange={(e) => setExpenseForm(prev => ({ ...prev, category: e.target.value }))}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                  required
                 >
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
+                  {categories.length === 0 ? (
+                    <option value="">No budget categories available</option>
+                  ) : (
+                    categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))
+                  )}
                 </select>
               </div>
               <div>

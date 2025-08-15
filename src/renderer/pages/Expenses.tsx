@@ -19,6 +19,11 @@ interface Grant {
   id: string
   title: string
   agency: string
+  budgetCategories?: {
+    id: string
+    category: string
+    amount: number
+  }[]
 }
 
 export default function Expenses() {
@@ -31,7 +36,26 @@ export default function Expenses() {
     grantId: ''
   })
 
-  const categories = ['Personnel', 'Equipment', 'Travel', 'Supplies', 'Other']
+  // Get all unique categories from all grants (excluding indirect costs)
+  const getAllCategories = (): string[] => {
+    const allCategories = new Set<string>()
+    grants.forEach(grant => {
+      if (grant.budgetCategories) {
+        grant.budgetCategories.forEach(cat => {
+          if (cat.category !== 'Indirect Costs') {
+            allCategories.add(cat.category)
+          }
+        })
+      }
+    })
+    // Add default categories if no budget categories exist
+    if (allCategories.size === 0) {
+      return ['PI Summer Salary', 'Student Summer Salary', 'Travel', 'Materials and Supplies', 'Publication Costs', 'Tuition']
+    }
+    return Array.from(allCategories).sort()
+  }
+  
+  const categories = getAllCategories()
 
   useEffect(() => {
     loadData()

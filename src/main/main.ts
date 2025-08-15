@@ -360,7 +360,8 @@ ipcMain.handle('files:importGrantsFromExcel', async () => {
         { key: 'Travel', type: 'travel' },
         { key: 'Materials', type: 'materials' },
         { key: 'Publication', type: 'publication' },
-        { key: 'Tuition', type: 'tuition' }
+        { key: 'Tuition', type: 'tuition' },
+        { key: 'Indirect', type: 'indirect' }
       ]
       
       // Process specific budget types

@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 export interface BudgetCategory {
   id: string
   category: string
-  type: 'pi_salary' | 'student_salary' | 'travel' | 'materials' | 'publication' | 'tuition' | 'other'
+  type: 'pi_salary' | 'student_salary' | 'travel' | 'materials' | 'publication' | 'tuition' | 'indirect' | 'other'
   amount: number
   description?: string
   createdAt: string
@@ -61,6 +61,10 @@ export interface MaterialsBudget extends BudgetCategory {
 
 export interface PublicationBudget extends BudgetCategory {
   type: 'publication'
+}
+
+export interface IndirectBudget extends BudgetCategory {
+  type: 'indirect'
 }
 
 export interface Grant {

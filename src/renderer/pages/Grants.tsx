@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import BudgetForm from '../components/BudgetForm'
+import ExpenseForm from '../components/ExpenseForm'
 
 interface Grant {
   id: string
@@ -22,6 +23,8 @@ export default function Grants() {
   const [showForm, setShowForm] = useState(false)
   const [showBudgetForm, setShowBudgetForm] = useState(false)
   const [selectedGrantForBudget, setSelectedGrantForBudget] = useState<string | null>(null)
+  const [showExpenseForm, setShowExpenseForm] = useState(false)
+  const [selectedGrantForExpense, setSelectedGrantForExpense] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     title: '',
     agency: '',
@@ -242,6 +245,56 @@ export default function Grants() {
     setSelectedGrantForBudget(null)
   }
 
+  const handleManageExpense = (grantId: string) => {
+    setSelectedGrantForExpense(grantId)
+    setShowExpenseForm(true)
+  }
+
+  const handleSaveExpense = async (expenses: any[]) => {
+    try {
+      if (!window.electronAPI || !selectedGrantForExpense) {
+        throw new Error('electronAPI not available or no grant selected')
+      }
+      
+      // Save each expense individually through the existing expense creation API
+      for (const expense of expenses) {
+        if (!expense.id || expense.id.includes('temp')) {
+          // This is a new expense, create it
+          await window.electronAPI.expenses.create({
+            description: expense.description,
+            amount: expense.amount,
+            category: expense.category,
+            date: expense.date,
+            notes: expense.notes || '',
+            grantId: selectedGrantForExpense
+          })
+        } else {
+          // This is an existing expense, update it
+          await window.electronAPI.expenses.update(expense.id, {
+            description: expense.description,
+            amount: expense.amount,
+            category: expense.category,
+            date: expense.date,
+            notes: expense.notes || ''
+          })
+        }
+      }
+      
+      await loadGrants() // Refresh to show updated expenses
+      setShowExpenseForm(false)
+      setSelectedGrantForExpense(null)
+      alert('Expenses saved successfully!')
+    } catch (error) {
+      console.error('Failed to save expenses:', error)
+      alert('Failed to save expenses: ' + (error as Error).message)
+    }
+  }
+
+  const handleCancelExpense = () => {
+    setShowExpenseForm(false)
+    setSelectedGrantForExpense(null)
+  }
+
   // Budget category management for new grant form
   const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36)
   
@@ -304,6 +357,7 @@ export default function Grants() {
       case 'materials': return 'Materials and Supplies'
       case 'publication': return 'Publication Costs'
       case 'tuition': return 'Tuition'
+      case 'indirect': return 'Indirect Costs'
       case 'other': return 'Other'
       default: return 'Unknown'
     }
@@ -317,6 +371,38 @@ export default function Grants() {
     const totalAmount = parseFloat(formData.totalAmount) || 0
     const budgetTotal = getTotalBudget()
     return Math.abs(totalAmount - budgetTotal) < 0.01 // Allow for small floating point differences
+  }
+
+  const autoBalanceWithIndirect = () => {
+    const totalAmount = parseFloat(formData.totalAmount) || 0
+    const budgetTotal = getTotalBudget()
+    const difference = totalAmount - budgetTotal
+    
+    // Find existing indirect category or create one
+    let indirectCategory = formBudgetCategories.find(budget => budget.type === 'indirect')
+    
+    if (indirectCategory) {
+      // Update existing indirect category
+      updateFormBudgetCategory(indirectCategory.id, { amount: indirectCategory.amount + difference })
+    } else {
+      // Create new indirect category with the difference amount
+      const newIndirectBudget = {
+        id: generateId(),
+        category: getBudgetCategoryName('indirect'),
+        type: 'indirect',
+        amount: difference,
+        createdAt: new Date().toISOString(),
+        description: 'Auto-balanced indirect costs',
+        notes: ''
+      }
+      setFormBudgetCategories([...formBudgetCategories, newIndirectBudget])
+    }
+  }
+
+  const getBudgetDifference = (): number => {
+    const totalAmount = parseFloat(formData.totalAmount) || 0
+    const budgetTotal = getTotalBudget()
+    return totalAmount - budgetTotal
   }
 
   return (
@@ -414,17 +500,29 @@ export default function Grants() {
             <div className="border-t pt-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium text-gray-900">Budget Categories</h3>
-                <div className="text-sm text-gray-600">
-                  Budget Total: <span className={`font-semibold ${isBudgetBalanced() ? 'text-green-600' : 'text-red-600'}`}>
-                    ${getTotalBudget().toLocaleString()}
-                  </span>
-                  {formData.totalAmount && (
-                    <span className="ml-2">
-                      / ${parseFloat(formData.totalAmount || '0').toLocaleString()}
-                      {!isBudgetBalanced() && formBudgetCategories.length > 0 && (
-                        <span className="text-red-600 ml-1">⚠️ Mismatch</span>
-                      )}
+                <div className="flex items-center space-x-3">
+                  <div className="text-sm text-gray-600">
+                    Budget Total: <span className={`font-semibold ${isBudgetBalanced() ? 'text-green-600' : 'text-red-600'}`}>
+                      ${getTotalBudget().toLocaleString()}
                     </span>
+                    {formData.totalAmount && (
+                      <span className="ml-2">
+                        / ${parseFloat(formData.totalAmount || '0').toLocaleString()}
+                        {!isBudgetBalanced() && formBudgetCategories.length > 0 && (
+                          <span className="text-red-600 ml-1">⚠️ Mismatch: ${Math.abs(getBudgetDifference()).toFixed(2)}</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  {!isBudgetBalanced() && formBudgetCategories.length > 0 && formData.totalAmount && Math.abs(getBudgetDifference()) > 0.01 && (
+                    <button
+                      type="button"
+                      onClick={autoBalanceWithIndirect}
+                      className="px-3 py-1 bg-orange-600 text-white rounded-md text-sm hover:bg-orange-700 flex items-center space-x-1"
+                    >
+                      <span>⚖️</span>
+                      <span>Auto-Balance</span>
+                    </button>
                   )}
                 </div>
               </div>
@@ -474,6 +572,13 @@ export default function Grants() {
                     className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-md text-sm hover:bg-indigo-200"
                   >
                     Tuition
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addFormBudgetCategory('indirect')}
+                    className="px-3 py-1 bg-orange-100 text-orange-800 rounded-md text-sm hover:bg-orange-200"
+                  >
+                    Indirect Costs
                   </button>
                   <button
                     type="button"
@@ -621,7 +726,7 @@ export default function Grants() {
                         </div>
                       )}
 
-                      {(budget.type === 'materials' || budget.type === 'publication' || budget.type === 'other') && (
+                      {(budget.type === 'materials' || budget.type === 'publication' || budget.type === 'indirect' || budget.type === 'other') && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Total Amount ($)</label>
                           <input
@@ -754,6 +859,12 @@ export default function Grants() {
                         Budget
                       </button>
                       <button
+                        onClick={() => handleManageExpense(grant.id)}
+                        className="text-orange-600 hover:underline"
+                      >
+                        Expense
+                      </button>
+                      <button
                         onClick={() => handleDelete(grant.id)}
                         className="text-red-600 hover:underline"
                       >
@@ -777,6 +888,20 @@ export default function Grants() {
               initialBudgets={grants.find(g => g.id === selectedGrantForBudget)?.budgetCategories || []}
               onSave={handleSaveBudget}
               onCancel={handleCancelBudget}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Expense Form Modal */}
+      {showExpenseForm && selectedGrantForExpense && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
+            <ExpenseForm
+              grantId={selectedGrantForExpense}
+              initialExpenses={grants.find(g => g.id === selectedGrantForExpense)?.expenses || []}
+              onSave={handleSaveExpense}
+              onCancel={handleCancelExpense}
             />
           </div>
         </div>
