@@ -35,7 +35,7 @@ export default function ExpenseForm({ grantId, initialExpenses = [], onSave, onC
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses)
   const [grant, setGrant] = useState<Grant | null>(null)
   
-  const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36)
+  const generateId = () => 'temp_' + Math.random().toString(36).substring(2) + Date.now().toString(36)
   
   useEffect(() => {
     loadGrant()

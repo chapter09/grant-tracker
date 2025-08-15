@@ -1,13 +1,35 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import BudgetUpload from '../components/BudgetUpload'
+import BudgetForm from '../components/BudgetForm'
 
 interface BudgetCategory {
   id: string
   category: string
+  type: 'pi_salary' | 'student_salary' | 'travel' | 'materials' | 'publication' | 'tuition' | 'other'
   amount: number
   description?: string
+  createdAt: string
+  
+  // Salary-specific fields
+  monthlyRate?: number
+  numberOfMonths?: number
+  
+  // Tuition-specific fields
+  yearlyRate?: number
+  numberOfYears?: number
+  
+  // Travel-specific fields
+  numberOfTrips?: number
+  costPerTrip?: number
+  
+  // Student-specific fields
+  numberOfStudents?: number
+  
+  // Additional metadata
+  notes?: string
+  fiscalYear?: string
 }
 
 interface Grant {
@@ -35,9 +57,11 @@ interface Expense {
 
 export default function GrantDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [grant, setGrant] = useState<Grant | null>(null)
   const [showExpenseForm, setShowExpenseForm] = useState(false)
   const [showBudgetUpload, setShowBudgetUpload] = useState(false)
+  const [showBudgetForm, setShowBudgetForm] = useState(false)
   const [expenseForm, setExpenseForm] = useState({
     description: '',
     amount: '',
@@ -125,6 +149,43 @@ export default function GrantDetail() {
     }
   }
 
+  const handleSaveBudget = async (budgetCategories: BudgetCategory[]) => {
+    try {
+      if (!grant || !window.electronAPI) {
+        throw new Error('Grant or electronAPI not available')
+      }
+      
+      // Update the grant with new budget categories
+      const updatedGrant = await window.electronAPI.grants.update(grant.id, {
+        budgetCategories
+      })
+      
+      setGrant(updatedGrant)
+      setShowBudgetForm(false)
+    } catch (error) {
+      console.error('Failed to save budget:', error)
+      alert('Failed to save budget. Please try again.')
+    }
+  }
+
+  const handleDeleteGrant = async () => {
+    if (!grant || !window.electronAPI) return
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the grant "${grant.title}"? This action cannot be undone.`
+    )
+    
+    if (confirmed) {
+      try {
+        await window.electronAPI.grants.delete(grant.id)
+        navigate('/grants')
+      } catch (error) {
+        console.error('Failed to delete grant:', error)
+        alert('Failed to delete grant. Please try again.')
+      }
+    }
+  }
+
   if (!grant) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -145,16 +206,22 @@ export default function GrantDetail() {
         </div>
         <div className="flex space-x-3">
           <button
-            onClick={() => setShowBudgetUpload(true)}
+            onClick={() => setShowBudgetForm(true)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
           >
-            Import Budget
+            Budget
           </button>
           <button
             onClick={() => setShowExpenseForm(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
           >
-            Add Expense
+            Expense
+          </button>
+          <button
+            onClick={handleDeleteGrant}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+          >
+            Delete
           </button>
         </div>
       </div>
@@ -176,29 +243,21 @@ export default function GrantDetail() {
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-lg font-medium mb-4">Grant Details</h2>
-        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h2 className="text-base font-medium mb-3">Grant Details</h2>
+        <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
           <div>
-            <dt className="text-sm font-medium text-gray-500">Agency</dt>
-            <dd className="text-sm text-gray-900">{grant.agency}</dd>
+            <dt className="text-xs font-medium text-gray-500">Agency</dt>
+            <dd className="text-sm text-gray-900 mt-0.5">{grant.agency}</dd>
           </div>
           <div>
-            <dt className="text-sm font-medium text-gray-500">Grant Number</dt>
-            <dd className="text-sm text-gray-900">{grant.number}</dd>
+            <dt className="text-xs font-medium text-gray-500">Grant Number</dt>
+            <dd className="text-sm text-gray-900 mt-0.5">{grant.number}</dd>
           </div>
           <div>
-            <dt className="text-sm font-medium text-gray-500">Start Date</dt>
-            <dd className="text-sm text-gray-900">{format(new Date(grant.startDate), 'MMM dd, yyyy')}</dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">End Date</dt>
-            <dd className="text-sm text-gray-900">{format(new Date(grant.endDate), 'MMM dd, yyyy')}</dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Status</dt>
-            <dd>
-              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+            <dt className="text-xs font-medium text-gray-500">Status</dt>
+            <dd className="mt-0.5">
+              <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
                 grant.status === 'Active' 
                   ? 'bg-green-100 text-green-800' 
                   : 'bg-gray-100 text-gray-800'
@@ -207,10 +266,18 @@ export default function GrantDetail() {
               </span>
             </dd>
           </div>
+          <div>
+            <dt className="text-xs font-medium text-gray-500">Start Date</dt>
+            <dd className="text-sm text-gray-900 mt-0.5">{format(new Date(grant.startDate), 'MMM dd, yyyy')}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-gray-500">End Date</dt>
+            <dd className="text-sm text-gray-900 mt-0.5">{format(new Date(grant.endDate), 'MMM dd, yyyy')}</dd>
+          </div>
           {grant.description && (
-            <div className="md:col-span-2">
-              <dt className="text-sm font-medium text-gray-500">Description</dt>
-              <dd className="text-sm text-gray-900 mt-1">{grant.description}</dd>
+            <div className="col-span-2 md:col-span-3 pt-2 border-t border-gray-100">
+              <dt className="text-xs font-medium text-gray-500">Description</dt>
+              <dd className="text-sm text-gray-900 mt-0.5">{grant.description}</dd>
             </div>
           )}
         </dl>
@@ -260,6 +327,15 @@ export default function GrantDetail() {
           grantId={grant.id}
           onBudgetImported={handleBudgetImported}
           onClose={() => setShowBudgetUpload(false)}
+        />
+      )}
+
+      {showBudgetForm && (
+        <BudgetForm
+          grantId={grant.id}
+          initialBudgets={grant.budgetCategories || []}
+          onSave={handleSaveBudget}
+          onCancel={() => setShowBudgetForm(false)}
         />
       )}
 

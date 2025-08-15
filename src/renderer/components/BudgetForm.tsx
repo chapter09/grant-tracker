@@ -56,7 +56,7 @@ export default function BudgetForm({ grantId, initialBudgets = [], onSave, onCan
     switch (type) {
       case 'pi_salary':
         newBudget.monthlyRate = 0
-        newBudget.numberOfMonths = 3 // Default summer months
+        newBudget.numberOfMonths = 1 // Default 1 month
         break
       case 'student_salary':
         newBudget.monthlyRate = 0
@@ -150,9 +150,11 @@ export default function BudgetForm({ grantId, initialBudgets = [], onSave, onCan
               <label className="block text-sm font-medium text-gray-700">Number of Months</label>
               <input
                 type="number"
+                step="0.25"
                 value={budget.numberOfMonths || ''}
-                onChange={(e) => updateBudget(budget.id, { numberOfMonths: parseInt(e.target.value) || 0 })}
+                onChange={(e) => updateBudget(budget.id, { numberOfMonths: parseFloat(e.target.value) || 0 })}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                placeholder="e.g., 0.25, 1, 2.5"
               />
             </div>
           </div>
@@ -175,9 +177,11 @@ export default function BudgetForm({ grantId, initialBudgets = [], onSave, onCan
               <label className="block text-sm font-medium text-gray-700">Number of Months</label>
               <input
                 type="number"
+                step="0.25"
                 value={budget.numberOfMonths || ''}
-                onChange={(e) => updateBudget(budget.id, { numberOfMonths: parseInt(e.target.value) || 0 })}
+                onChange={(e) => updateBudget(budget.id, { numberOfMonths: parseFloat(e.target.value) || 0 })}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                placeholder="e.g., 0.25, 1, 2.5"
               />
             </div>
             <div>

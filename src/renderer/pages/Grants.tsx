@@ -308,7 +308,7 @@ export default function Grants() {
       description: '',
       notes: '',
       // Default values based on type
-      ...(type === 'pi_salary' && { monthlyRate: 0, numberOfMonths: 3 }),
+      ...(type === 'pi_salary' && { monthlyRate: 0, numberOfMonths: 1 }),
       ...(type === 'student_salary' && { monthlyRate: 0, numberOfMonths: 3, numberOfStudents: 1 }),
       ...(type === 'tuition' && { yearlyRate: 0, numberOfYears: 1, numberOfStudents: 1 }),
       ...(type === 'travel' && { numberOfTrips: 1, costPerTrip: 0 })
@@ -410,7 +410,7 @@ export default function Grants() {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Grants</h1>
         <div className="flex space-x-3">
-          <button
+          {/* <button
             onClick={handleImportExcel}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
           >
@@ -418,7 +418,7 @@ export default function Grants() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
             </svg>
             <span>Import Excel</span>
-          </button>
+          </button> */}
           <button
             onClick={() => setShowForm(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
@@ -628,9 +628,11 @@ export default function Grants() {
                             <label className="block text-sm font-medium text-gray-700">Number of Months</label>
                             <input
                               type="number"
+                              step="0.25"
                               value={budget.numberOfMonths || ''}
-                              onChange={(e) => updateFormBudgetCategory(budget.id, { numberOfMonths: parseInt(e.target.value) || 0 })}
+                              onChange={(e) => updateFormBudgetCategory(budget.id, { numberOfMonths: parseFloat(e.target.value) || 0 })}
                               className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                              placeholder="e.g., 0.25, 1, 2.5"
                             />
                           </div>
                         </div>
@@ -652,9 +654,11 @@ export default function Grants() {
                             <label className="block text-sm font-medium text-gray-700">Months</label>
                             <input
                               type="number"
+                              step="0.25"
                               value={budget.numberOfMonths || ''}
-                              onChange={(e) => updateFormBudgetCategory(budget.id, { numberOfMonths: parseInt(e.target.value) || 0 })}
+                              onChange={(e) => updateFormBudgetCategory(budget.id, { numberOfMonths: parseFloat(e.target.value) || 0 })}
                               className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                              placeholder="e.g., 0.25, 1, 2.5"
                             />
                           </div>
                           <div>

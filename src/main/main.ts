@@ -382,11 +382,11 @@ ipcMain.handle('files:importGrantsFromExcel', async () => {
           switch (budgetType.type) {
             case 'pi_salary':
               budget.monthlyRate = parseFloat(row['PI Monthly Rate'] || 0)
-              budget.numberOfMonths = parseInt(row['PI Months'] || 3)
+              budget.numberOfMonths = parseFloat(row['PI Months'] || 1)
               break
             case 'student_salary':
               budget.monthlyRate = parseFloat(row['Student Monthly Rate'] || 0)
-              budget.numberOfMonths = parseInt(row['Student Months'] || 3)
+              budget.numberOfMonths = parseFloat(row['Student Months'] || 3)
               budget.numberOfStudents = parseInt(row['Number of Students'] || 1)
               break
             case 'tuition':

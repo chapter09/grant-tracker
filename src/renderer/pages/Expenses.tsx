@@ -126,7 +126,7 @@ export default function Expenses() {
               type="date"
               value={filters.startDate}
               onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
-              className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+              className="mt-1 block w-full h-10 border border-gray-300 rounded-md px-3 py-2"
             />
           </div>
           <div>
@@ -135,7 +135,7 @@ export default function Expenses() {
               type="date"
               value={filters.endDate}
               onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
-              className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+              className="mt-1 block w-full h-10 border border-gray-300 rounded-md px-3 py-2"
             />
           </div>
           <div>
@@ -143,7 +143,7 @@ export default function Expenses() {
             <select
               value={filters.category}
               onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
-              className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+              className="mt-1 block w-full h-10 border border-gray-300 rounded-md px-3 py-2"
             >
               <option value="">All Categories</option>
               {categories.map(cat => (
@@ -156,7 +156,7 @@ export default function Expenses() {
             <select
               value={filters.grantId}
               onChange={(e) => setFilters(prev => ({ ...prev, grantId: e.target.value }))}
-              className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+              className="mt-1 block w-full h-10 border border-gray-300 rounded-md px-3 py-2"
             >
               <option value="">All Grants</option>
               {grants.map(grant => (

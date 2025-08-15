@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { format, startOfMonth, endOfMonth } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, isAfter, eachWeekOfInterval, addDays } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 
 interface Grant {
@@ -8,8 +8,16 @@ interface Grant {
   title: string
   agency: string
   totalAmount: number
+  startDate: string
+  endDate: string
   status: string
-  expenses: { amount: number }[]
+  expenses: { amount: number, category: string, date: string }[]
+  budgetCategories?: {
+    id: string
+    category: string
+    amount: number
+    type: string
+  }[]
 }
 
 interface Expense {
@@ -24,6 +32,7 @@ export default function Dashboard() {
   const [grants, setGrants] = useState<Grant[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedGrantId, setSelectedGrantId] = useState<string>('')
   const [dateRange, setDateRange] = useState({
     start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
@@ -32,6 +41,12 @@ export default function Dashboard() {
   useEffect(() => {
     loadData()
   }, [dateRange])
+
+  useEffect(() => {
+    if (grants.length > 0 && !selectedGrantId) {
+      setSelectedGrantId(grants[0].id)
+    }
+  }, [grants, selectedGrantId])
 
   const loadData = async () => {
     setLoading(true)
@@ -58,6 +73,71 @@ export default function Dashboard() {
     sum + (grant.expenses || []).reduce((expSum, exp) => expSum + exp.amount, 0), 0)
   
   const activeGrants = grants.filter(g => g.status === 'Active').length
+
+  // Budget remaining timeline calculation for selected grant
+  const selectedGrant = grants.find(g => g.id === selectedGrantId)
+  const getBudgetTimelineData = () => {
+    try {
+      if (!selectedGrant?.budgetCategories || !selectedGrant.startDate || !selectedGrant.endDate) return []
+      
+      const categories = selectedGrant.budgetCategories.filter(budget => budget.category !== 'Indirect Costs')
+      if (categories.length === 0) return []
+      
+      // Get date range from grant start to end (or current date if grant hasn't ended)
+      const startDate = parseISO(selectedGrant.startDate)
+      const endDate = parseISO(selectedGrant.endDate)
+      const today = new Date()
+      const currentEndDate = isAfter(today, endDate) ? endDate : today
+      
+      // Create timeline from start to current date (or end date) - use weekly intervals for better performance
+      const dateRange = eachWeekOfInterval({ start: startDate, end: currentEndDate })
+      
+      // Add the actual start date if not included
+      if (dateRange.length === 0 || dateRange[0].getTime() !== startDate.getTime()) {
+        dateRange.unshift(startDate)
+      }
+      
+      // Add one more week after end date to show the drop to 0
+      if (isAfter(today, endDate)) {
+        dateRange.push(addDays(endDate, 7))
+      }
+      
+      return dateRange.map(date => {
+        const dateStr = format(date, 'yyyy-MM-dd')
+        const isAfterGrant = isAfter(date, endDate)
+        
+        const dataPoint: any = { date: format(date, 'MM/dd/yyyy') }
+        
+        categories.forEach(budget => {
+          if (isAfterGrant) {
+            // After grant ends, remaining goes to 0
+            dataPoint[budget.category] = 0
+          } else {
+            // Calculate expenses up to this date
+            const expensesUpToDate = (selectedGrant.expenses || [])
+              .filter(exp => exp.category === budget.category && exp.date <= dateStr)
+              .reduce((sum, exp) => sum + exp.amount, 0)
+            
+            dataPoint[budget.category] = Math.max(0, budget.amount - expensesUpToDate)
+          }
+        })
+        
+        return dataPoint
+      })
+    } catch (error) {
+      console.error('Error in getBudgetTimelineData:', error)
+      return []
+    }
+  }
+
+  const budgetTimelineData = getBudgetTimelineData()
+  const budgetCategories = selectedGrant?.budgetCategories?.filter(budget => budget.category !== 'Indirect Costs') || []
+  const totalRemaining = budgetCategories.reduce((sum, budget) => {
+    const categoryExpenses = (selectedGrant?.expenses || [])
+      .filter(exp => exp.category === budget.category)
+      .reduce((total, exp) => total + exp.amount, 0)
+    return sum + Math.max(0, budget.amount - categoryExpenses)
+  }, 0)
 
   const expensesByCategory = expenses.reduce((acc, expense) => {
     acc[expense.category] = (acc[expense.category] || 0) + expense.amount
@@ -115,6 +195,98 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Budget Remaining Visualization */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium">Budget Remaining by Category</h3>
+          <div className="flex items-center space-x-4">
+            <select
+              value={selectedGrantId}
+              onChange={(e) => setSelectedGrantId(e.target.value)}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="">Select a grant</option>
+              {grants.map(grant => (
+                <option key={grant.id} value={grant.id}>
+                  {grant.title} ({grant.agency})
+                </option>
+              ))}
+            </select>
+            {selectedGrant && (
+              <div className="text-sm text-gray-600">
+                Total Remaining: <span className="font-semibold text-green-600">${totalRemaining.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {selectedGrant ? (
+          budgetCategories.length > 0 ? (
+            budgetTimelineData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart
+                  data={budgetTimelineData}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fontSize: 12 }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis 
+                    tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
+                  />
+                  <Tooltip
+                    formatter={(value, name) => {
+                      return [`$${Number(value).toLocaleString()}`, name]
+                    }}
+                    labelFormatter={(label) => `Date: ${label}`}
+                  />
+                  {budgetCategories.map((budget, index) => {
+                    const colors = [
+                      '#3B82F6', // blue
+                      '#10B981', // green  
+                      '#F59E0B', // yellow
+                      '#EF4444', // red
+                      '#8B5CF6', // purple
+                      '#06B6D4', // cyan
+                      '#F97316', // orange
+                      '#84CC16', // lime
+                    ]
+                    return (
+                      <Line
+                        key={budget.id}
+                        type="monotone"
+                        dataKey={budget.category}
+                        stroke={colors[index % colors.length]}
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        connectNulls={false}
+                      />
+                    )
+                  })}
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>Timeline data could not be generated.</p>
+                <p className="text-sm mt-1">Check that the grant has valid start/end dates.</p>
+              </div>
+            )
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p>No budget categories available for this grant.</p>
+              <p className="text-sm mt-1">Add budget categories to see the visualization.</p>
+            </div>
+          )
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            Select a grant to view budget remaining over time
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-medium mb-4">Expenses Over Time</h3>
@@ -142,6 +314,8 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      
 
       <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b">
