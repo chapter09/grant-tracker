@@ -5,9 +5,30 @@ import fs from 'fs'
 let mainWindow: BrowserWindow
 
 const createWindow = () => {
-  const preloadPath = path.join(__dirname, 'preload.js')
-  console.log('Preload script path:', preloadPath)
-  console.log('Preload script exists:', require('fs').existsSync(preloadPath))
+  // Try different paths for preload script
+  const possiblePaths = [
+    path.join(__dirname, 'preload.js'),
+    path.join(process.cwd(), 'dist', 'main', 'preload.js'),
+    path.resolve(__dirname, 'preload.js')
+  ]
+  
+  let preloadPath = ''
+  for (const testPath of possiblePaths) {
+    console.log('Testing preload path:', testPath)
+    if (fs.existsSync(testPath)) {
+      preloadPath = testPath
+      console.log('Found preload script at:', preloadPath)
+      break
+    }
+  }
+  
+  if (!preloadPath) {
+    console.error('ERROR: Could not find preload script!')
+    console.log('Current working directory:', process.cwd())
+    console.log('__dirname:', __dirname)
+    // Use the first path anyway and let it fail with a clear error
+    preloadPath = possiblePaths[0]
+  }
   
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -15,8 +36,20 @@ const createWindow = () => {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: preloadPath
+      preload: preloadPath,
+      // Additional debug settings
+      webSecurity: false, // Only for development debugging
+      allowRunningInsecureContent: true
     }
+  })
+
+  // Add event listeners to debug preload script loading
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('Page finished loading')
+  })
+  
+  mainWindow.webContents.on('preload-error', (_, preloadPath, error) => {
+    console.error('Preload script error:', preloadPath, error)
   })
 
   if (process.env.NODE_ENV === 'development') {

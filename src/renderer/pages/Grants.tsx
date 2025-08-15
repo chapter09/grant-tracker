@@ -30,9 +30,13 @@ export default function Grants() {
   })
 
   useEffect(() => {
-    console.log('Grants component mounted')
+    console.log('=== GRANTS COMPONENT MOUNTED ===')
+    console.log('window object keys:', Object.keys(window))
+    console.log('window.testAPI available:', !!(window as any).testAPI)
+    console.log('window.testAPI test:', (window as any).testAPI?.test?.())
     console.log('window.electronAPI available:', !!window.electronAPI)
     console.log('window.electronAPI.grants available:', !!window.electronAPI?.grants)
+    console.log('typeof window.electronAPI:', typeof window.electronAPI)
     loadGrants()
   }, [])
 
