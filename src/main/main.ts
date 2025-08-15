@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import * as XLSX from 'xlsx'
 
 let mainWindow: BrowserWindow
 
@@ -129,7 +130,8 @@ ipcMain.handle('grants:create', (_, grantData) => {
       ...grantData,
       id: generateId(),
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      budgetCategories: grantData.budgetCategories || []
     }
     console.log('IPC: New grant created:', newGrant)
     
@@ -279,3 +281,196 @@ ipcMain.handle('budget:update', (_, grantId, budgetCategories) => {
   
   throw new Error('Grant not found')
 })
+
+// Excel import handler
+ipcMain.handle('files:importGrantsFromExcel', async () => {
+  console.log('IPC: files:importGrantsFromExcel called')
+  
+  try {
+    // Show file dialog
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import Grants from Excel',
+      filters: [
+        { name: 'Excel Files', extensions: ['xlsx', 'xls'] },
+        { name: 'All Files', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    })
+    
+    if (result.canceled || result.filePaths.length === 0) {
+      console.log('IPC: File selection canceled')
+      return { success: false, error: 'File selection canceled' }
+    }
+    
+    const filePath = result.filePaths[0]
+    console.log('IPC: Processing Excel file:', filePath)
+    
+    // Read the Excel file
+    const workbook = XLSX.readFile(filePath)
+    const sheetName = workbook.SheetNames[0] // Use first sheet
+    const worksheet = workbook.Sheets[sheetName]
+    const data = XLSX.utils.sheet_to_json(worksheet)
+    
+    console.log('IPC: Excel data parsed:', data)
+    
+    if (!data || data.length === 0) {
+      return { success: false, error: 'No data found in Excel file' }
+    }
+    
+    // Process the data and create grants
+    const currentData = readData()
+    let grantsCreated = 0
+    let categoriesCreated = 0
+    
+    for (const row of data as any[]) {
+      // Map Excel columns to grant fields (adjust these based on your Excel structure)
+      const grantData = {
+        title: row['Grant Title'] || row['Title'] || row['title'] || '',
+        agency: row['Agency'] || row['agency'] || '',
+        number: row['Grant Number'] || row['Number'] || row['number'] || '',
+        totalAmount: parseFloat(row['Total Amount'] || row['Amount'] || row['totalAmount'] || 0),
+        startDate: formatDate(row['Start Date'] || row['startDate'] || ''),
+        endDate: formatDate(row['End Date'] || row['endDate'] || ''),
+        description: row['Description'] || row['description'] || '',
+        status: row['Status'] || row['status'] || 'Active'
+      }
+      
+      // Validate required fields
+      if (!grantData.title || !grantData.agency || !grantData.number) {
+        console.log('IPC: Skipping row due to missing required fields:', row)
+        continue
+      }
+      
+      // Create the grant
+      const newGrant = {
+        ...grantData,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        budgetCategories: [] as any[]
+      }
+      
+      // Add budget categories with enhanced structure
+      const budgetCategories: any[] = []
+      
+      // Handle specific budget types with enhanced fields
+      const budgetTypes = [
+        { key: 'PI Summer Salary', type: 'pi_salary' },
+        { key: 'Student Summer Salary', type: 'student_salary' },
+        { key: 'Travel', type: 'travel' },
+        { key: 'Materials', type: 'materials' },
+        { key: 'Publication', type: 'publication' },
+        { key: 'Tuition', type: 'tuition' }
+      ]
+      
+      // Process specific budget types
+      for (const budgetType of budgetTypes) {
+        const amount = parseFloat(row[budgetType.key] || row[budgetType.key.toLowerCase()] || 0)
+        if (amount > 0) {
+          const budget: any = {
+            id: generateId(),
+            category: budgetType.key,
+            type: budgetType.type,
+            amount: amount,
+            description: row[`${budgetType.key} Description`] || '',
+            createdAt: new Date().toISOString(),
+            notes: row[`${budgetType.key} Notes`] || ''
+          }
+          
+          // Add type-specific fields based on Excel columns
+          switch (budgetType.type) {
+            case 'pi_salary':
+              budget.monthlyRate = parseFloat(row['PI Monthly Rate'] || 0)
+              budget.numberOfMonths = parseInt(row['PI Months'] || 3)
+              break
+            case 'student_salary':
+              budget.monthlyRate = parseFloat(row['Student Monthly Rate'] || 0)
+              budget.numberOfMonths = parseInt(row['Student Months'] || 3)
+              budget.numberOfStudents = parseInt(row['Number of Students'] || 1)
+              break
+            case 'tuition':
+              budget.yearlyRate = parseFloat(row['Tuition Per Year'] || 0)
+              budget.numberOfYears = parseInt(row['Tuition Years'] || 1)
+              budget.numberOfStudents = parseInt(row['Tuition Students'] || 1)
+              break
+            case 'travel':
+              budget.numberOfTrips = parseInt(row['Number of Trips'] || 1)
+              budget.costPerTrip = parseFloat(row['Cost Per Trip'] || amount)
+              break
+          }
+          
+          budgetCategories.push(budget)
+          categoriesCreated++
+        }
+      }
+      
+      // Also handle generic budget categories (for backwards compatibility)
+      for (let i = 1; i <= 10; i++) {
+        const categoryName = row[`Category ${i}`] || row[`category${i}`]
+        const categoryAmount = row[`Amount ${i}`] || row[`amount${i}`]
+        
+        if (categoryName && categoryAmount) {
+          budgetCategories.push({
+            id: generateId(),
+            category: categoryName,
+            type: 'other',
+            amount: parseFloat(categoryAmount),
+            description: row[`Description ${i}`] || row[`description${i}`] || '',
+            createdAt: new Date().toISOString()
+          })
+          categoriesCreated++
+        }
+      }
+      
+      newGrant.budgetCategories = budgetCategories
+      currentData.grants.push(newGrant)
+      grantsCreated++
+      
+      console.log('IPC: Created grant from Excel:', newGrant)
+    }
+    
+    // Save the updated data
+    writeData(currentData)
+    
+    console.log(`IPC: Excel import completed - ${grantsCreated} grants, ${categoriesCreated} categories`)
+    
+    return {
+      success: true,
+      grantsCount: grantsCreated,
+      categoriesCount: categoriesCreated
+    }
+    
+  } catch (error) {
+    console.error('IPC: Error importing Excel file:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    }
+  }
+})
+
+// Helper function to format dates from Excel
+function formatDate(dateValue: any): string {
+  if (!dateValue) return ''
+  
+  try {
+    // Handle Excel date numbers
+    if (typeof dateValue === 'number') {
+      const date = XLSX.SSF.parse_date_code(dateValue)
+      return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`
+    }
+    
+    // Handle string dates
+    if (typeof dateValue === 'string') {
+      const date = new Date(dateValue)
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0]
+      }
+    }
+    
+    return dateValue.toString()
+  } catch (error) {
+    console.error('Error formatting date:', error)
+    return ''
+  }
+}

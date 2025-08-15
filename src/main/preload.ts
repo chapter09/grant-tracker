@@ -3,9 +3,64 @@ import { contextBridge, ipcRenderer } from 'electron'
 export interface BudgetCategory {
   id: string
   category: string
+  type: 'pi_salary' | 'student_salary' | 'travel' | 'materials' | 'publication' | 'tuition' | 'other'
   amount: number
   description?: string
   createdAt: string
+  
+  // Salary-specific fields
+  monthlyRate?: number
+  numberOfMonths?: number
+  
+  // Tuition-specific fields
+  yearlyRate?: number
+  numberOfYears?: number
+  
+  // Travel-specific fields
+  numberOfTrips?: number
+  costPerTrip?: number
+  
+  // Student-specific fields
+  numberOfStudents?: number
+  
+  // Additional metadata
+  notes?: string
+  fiscalYear?: string
+}
+
+// Helper interfaces for specific budget types
+export interface PISalaryBudget extends BudgetCategory {
+  type: 'pi_salary'
+  monthlyRate: number
+  numberOfMonths: number
+}
+
+export interface StudentSalaryBudget extends BudgetCategory {
+  type: 'student_salary'
+  monthlyRate: number
+  numberOfMonths: number
+  numberOfStudents: number
+}
+
+export interface TuitionBudget extends BudgetCategory {
+  type: 'tuition'
+  yearlyRate: number
+  numberOfYears: number
+  numberOfStudents: number
+}
+
+export interface TravelBudget extends BudgetCategory {
+  type: 'travel'
+  numberOfTrips?: number
+  costPerTrip?: number
+}
+
+export interface MaterialsBudget extends BudgetCategory {
+  type: 'materials'
+}
+
+export interface PublicationBudget extends BudgetCategory {
+  type: 'publication'
 }
 
 export interface Grant {
@@ -56,6 +111,14 @@ export interface ElectronAPI {
     get: (grantId: string) => Promise<BudgetCategory[]>
     update: (grantId: string, budgetCategories: BudgetCategory[]) => Promise<BudgetCategory[]>
   }
+  files: {
+    importGrantsFromExcel: () => Promise<{
+      success: boolean
+      grantsCount?: number
+      categoriesCount?: number
+      error?: string
+    }>
+  }
 }
 
 const electronAPI: ElectronAPI = {
@@ -76,6 +139,9 @@ const electronAPI: ElectronAPI = {
     import: (grantId, budgetCategories) => ipcRenderer.invoke('budget:import', grantId, budgetCategories),
     get: (grantId) => ipcRenderer.invoke('budget:get', grantId),
     update: (grantId, budgetCategories) => ipcRenderer.invoke('budget:update', grantId, budgetCategories)
+  },
+  files: {
+    importGrantsFromExcel: () => ipcRenderer.invoke('files:importGrantsFromExcel')
   }
 }
 
@@ -83,17 +149,32 @@ console.log('=== PRELOAD SCRIPT START ===')
 console.log('Preload script loaded, exposing electronAPI')
 console.log('electronAPI object:', electronAPI)
 
-// Test basic contextBridge functionality
-contextBridge.exposeInMainWorld('testAPI', {
-  test: () => 'Preload script is working!'
-})
+try {
+  // Test basic contextBridge functionality
+  contextBridge.exposeInMainWorld('testAPI', {
+    test: () => 'Preload script is working!'
+  })
+  console.log('testAPI exposed successfully')
+  
+  contextBridge.exposeInMainWorld('electronAPI', electronAPI)
+  console.log('electronAPI exposed to main world successfully')
+  
+  // Add a ready signal
+  contextBridge.exposeInMainWorld('electronAPIReady', true)
+  console.log('electronAPIReady flag set')
+  
+} catch (error) {
+  console.error('Error exposing APIs to main world:', error)
+}
 
-contextBridge.exposeInMainWorld('electronAPI', electronAPI)
-console.log('electronAPI exposed to main world')
 console.log('=== PRELOAD SCRIPT END ===')
 
 declare global {
   interface Window {
     electronAPI: ElectronAPI
+    electronAPIReady: boolean
+    testAPI: {
+      test: () => string
+    }
   }
 }
