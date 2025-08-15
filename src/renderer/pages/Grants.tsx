@@ -30,11 +30,20 @@ export default function Grants() {
   })
 
   useEffect(() => {
+    console.log('Grants component mounted')
+    console.log('window.electronAPI available:', !!window.electronAPI)
+    console.log('window.electronAPI.grants available:', !!window.electronAPI?.grants)
     loadGrants()
   }, [])
 
   const loadGrants = async () => {
     try {
+      if (!window.electronAPI) {
+        throw new Error('electronAPI not available - preload script may not be working')
+      }
+      if (!window.electronAPI.grants) {
+        throw new Error('electronAPI.grants not available')
+      }
       const data = await window.electronAPI.grants.getAll()
       console.log('Loaded grants:', data)
       setGrants(data || [])
@@ -49,6 +58,13 @@ export default function Grants() {
     console.log('Submitting grant form with data:', formData)
     
     try {
+      if (!window.electronAPI) {
+        throw new Error('electronAPI not available - preload script may not be working')
+      }
+      if (!window.electronAPI.grants) {
+        throw new Error('electronAPI.grants not available')
+      }
+      
       const grantToCreate = {
         ...formData,
         totalAmount: parseFloat(formData.totalAmount)

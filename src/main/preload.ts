@@ -79,7 +79,10 @@ const electronAPI: ElectronAPI = {
   }
 }
 
+console.log('Preload script loaded, exposing electronAPI')
+console.log('electronAPI object:', electronAPI)
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)
+console.log('electronAPI exposed to main world')
 
 declare global {
   interface Window {

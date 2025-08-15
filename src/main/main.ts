@@ -5,13 +5,17 @@ import fs from 'fs'
 let mainWindow: BrowserWindow
 
 const createWindow = () => {
+  const preloadPath = path.join(__dirname, 'preload.js')
+  console.log('Preload script path:', preloadPath)
+  console.log('Preload script exists:', require('fs').existsSync(preloadPath))
+  
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: preloadPath
     }
   })
 
