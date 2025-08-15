@@ -18,40 +18,6 @@
 
 > **A powerful, offline-first desktop application for tracking research grants with Excel budget import capabilities**
 
-## 🌟 Features
-
-### 📊 **Grant Management**
-- ✅ Create, edit, and delete research grants
-- ✅ Track grant status (Active, Completed, Cancelled)
-- ✅ Store grant details (agency, number, dates, budget)
-- ✅ Comprehensive grant overview dashboard
-
-### 💰 **Expense Tracking**
-- ✅ Categorized expense tracking (Personnel, Equipment, Travel, Supplies, Other)
-- ✅ Real-time budget vs. spending analysis
-- ✅ Timeline-based expense filtering
-- ✅ Detailed expense management with notes and receipts
-
-### 📈 **Excel Budget Import**
-- ✅ Import budgets from Excel/CSV files
-- ✅ Flexible column mapping for different file formats
-- ✅ Category mapping to standardize expense types
-- ✅ Data preview before import
-- ✅ Budget allocation by category with spending tracking
-
-### 📊 **Analytics & Visualization**
-- ✅ Interactive charts using Recharts
-- ✅ Spending trends over time
-- ✅ Budget vs. actual comparisons
-- ✅ Category-wise expense breakdowns
-- ✅ Grant portfolio overview
-
-### 🔒 **Offline-First Architecture**
-- ✅ Fully functional without internet connection
-- ✅ Local JSON-based data storage
-- ✅ Cross-platform desktop application
-- ✅ Data stored in user's local directory
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -246,7 +212,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - UI powered by [React](https://reactjs.org/) and [Tailwind CSS](https://tailwindcss.com/)
 - Charts created with [Recharts](https://recharts.org/)
 - Excel processing using [SheetJS](https://sheetjs.com/)
-
----
-
-**Grant Tracker** - Simplifying research grant management, one expense at a time. 💼✨
