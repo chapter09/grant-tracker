@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, isAfter, eachWeekOfInterval, addDays } from 'date-fns'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts'
 
 interface Grant {
   id: string
@@ -44,13 +44,28 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (grants.length > 0 && !selectedGrantId) {
-      setSelectedGrantId(grants[0].id)
+      setSelectedGrantId('all') // Default to "All Grants"
     }
   }, [grants, selectedGrantId])
 
   const loadData = async () => {
     setLoading(true)
     try {
+      // Wait for electronAPI to be available
+      if (!window.electronAPI) {
+        console.log('electronAPI not available, waiting...')
+        await new Promise(resolve => {
+          const checkAPI = () => {
+            if (window.electronAPI) {
+              resolve(true)
+            } else {
+              setTimeout(checkAPI, 100)
+            }
+          }
+          checkAPI()
+        })
+      }
+      
       const [grantsData, expensesData] = await Promise.all([
         window.electronAPI.grants.getAll(),
         window.electronAPI.expenses.getByDateRange(dateRange.start, dateRange.end)
@@ -74,10 +89,15 @@ export default function Dashboard() {
   
   const activeGrants = grants.filter(g => g.status === 'Active').length
 
-  // Budget remaining timeline calculation for selected grant
+  // Budget remaining timeline calculation for selected grant or all grants
   const selectedGrant = grants.find(g => g.id === selectedGrantId)
   const getBudgetTimelineData = () => {
     try {
+      if (selectedGrantId === 'all') {
+        // Handle "All Grants" option
+        return getAllGrantsBudgetTimelineData()
+      }
+      
       if (!selectedGrant?.budgetCategories || !selectedGrant.startDate || !selectedGrant.endDate) return []
       
       const categories = selectedGrant.budgetCategories.filter(budget => budget.category !== 'Indirect Costs')
@@ -130,14 +150,142 @@ export default function Dashboard() {
     }
   }
 
+  // Function to handle "All Grants" timeline data
+  const getAllGrantsBudgetTimelineData = () => {
+    try {
+      const grantsWithBudgets = grants.filter(g => g.budgetCategories && g.budgetCategories.length > 0 && g.startDate && g.endDate)
+      if (grantsWithBudgets.length === 0) return []
+      
+      // Get all unique categories across all grants (excluding indirect costs)
+      const allCategories = new Set<string>()
+      grantsWithBudgets.forEach(grant => {
+        grant.budgetCategories?.forEach(budget => {
+          if (budget.category !== 'Indirect Costs') {
+            allCategories.add(budget.category)
+          }
+        })
+      })
+      
+      if (allCategories.size === 0) return []
+      
+      // Find the overall date range across all grants
+      const allStartDates = grantsWithBudgets.map(g => parseISO(g.startDate))
+      const allEndDates = grantsWithBudgets.map(g => parseISO(g.endDate))
+      const earliestStart = new Date(Math.min(...allStartDates.map(d => d.getTime())))
+      const latestEnd = new Date(Math.max(...allEndDates.map(d => d.getTime())))
+      const today = new Date()
+      const currentEndDate = isAfter(today, latestEnd) ? latestEnd : today
+      
+      // Create timeline from earliest start to latest end (or current date)
+      const dateRange = eachWeekOfInterval({ start: earliestStart, end: currentEndDate })
+      
+      // Add the actual start date if not included
+      if (dateRange.length === 0 || dateRange[0].getTime() !== earliestStart.getTime()) {
+        dateRange.unshift(earliestStart)
+      }
+      
+      // Add one more week after latest end date to show the drop to 0
+      if (isAfter(today, latestEnd)) {
+        dateRange.push(addDays(latestEnd, 7))
+      }
+      
+      return dateRange.map(date => {
+        const dateStr = format(date, 'yyyy-MM-dd')
+        const dataPoint: any = { date: format(date, 'MM/dd/yyyy') }
+        
+        // For each category, sum up remaining amounts across all grants
+        Array.from(allCategories).forEach(categoryName => {
+          let totalRemaining = 0
+          
+          grantsWithBudgets.forEach(grant => {
+            const grantStartDate = parseISO(grant.startDate)
+            const grantEndDate = parseISO(grant.endDate)
+            const isAfterThisGrant = isAfter(date, grantEndDate)
+            const isBeforeThisGrant = date < grantStartDate
+            
+            if (isBeforeThisGrant || isAfterThisGrant) {
+              // Don't count this grant's budget if we're outside its date range
+              return
+            }
+            
+            const categoryBudget = grant.budgetCategories?.find(b => b.category === categoryName)
+            if (categoryBudget) {
+              // Calculate expenses up to this date for this grant and category
+              const expensesUpToDate = (grant.expenses || [])
+                .filter(exp => exp.category === categoryName && exp.date <= dateStr)
+                .reduce((sum, exp) => sum + exp.amount, 0)
+              
+              totalRemaining += Math.max(0, categoryBudget.amount - expensesUpToDate)
+            }
+          })
+          
+          dataPoint[categoryName] = totalRemaining
+        })
+        
+        return dataPoint
+      })
+    } catch (error) {
+      console.error('Error in getAllGrantsBudgetTimelineData:', error)
+      return []
+    }
+  }
+
   const budgetTimelineData = getBudgetTimelineData()
-  const budgetCategories = selectedGrant?.budgetCategories?.filter(budget => budget.category !== 'Indirect Costs') || []
-  const totalRemaining = budgetCategories.reduce((sum, budget) => {
-    const categoryExpenses = (selectedGrant?.expenses || [])
-      .filter(exp => exp.category === budget.category)
-      .reduce((total, exp) => total + exp.amount, 0)
-    return sum + Math.max(0, budget.amount - categoryExpenses)
-  }, 0)
+  
+  // Get budget categories and total remaining based on selection
+  const getBudgetCategoriesAndTotal = () => {
+    if (selectedGrantId === 'all') {
+      // For "All Grants", get unique categories across all grants
+      const allCategories = new Set<string>()
+      let totalRemaining = 0
+      
+      grants.forEach(grant => {
+        if (grant.budgetCategories) {
+          grant.budgetCategories.forEach(budget => {
+            if (budget.category !== 'Indirect Costs') {
+              allCategories.add(budget.category)
+            }
+          })
+        }
+      })
+      
+      // Calculate total remaining across all grants for each category
+      Array.from(allCategories).forEach(categoryName => {
+        grants.forEach(grant => {
+          const categoryBudget = grant.budgetCategories?.find(b => b.category === categoryName)
+          if (categoryBudget) {
+            const categoryExpenses = (grant.expenses || [])
+              .filter(exp => exp.category === categoryName)
+              .reduce((total, exp) => total + exp.amount, 0)
+            totalRemaining += Math.max(0, categoryBudget.amount - categoryExpenses)
+          }
+        })
+      })
+      
+      // Create mock budget categories for display purposes
+      const mockCategories = Array.from(allCategories).map(category => ({
+        id: category,
+        category,
+        amount: 0, // Not used for display in "All Grants" mode
+        type: 'other' as const
+      }))
+      
+      return { budgetCategories: mockCategories, totalRemaining }
+    } else {
+      // Single grant selection
+      const budgetCategories = selectedGrant?.budgetCategories?.filter(budget => budget.category !== 'Indirect Costs') || []
+      const totalRemaining = budgetCategories.reduce((sum, budget) => {
+        const categoryExpenses = (selectedGrant?.expenses || [])
+          .filter(exp => exp.category === budget.category)
+          .reduce((total, exp) => total + exp.amount, 0)
+        return sum + Math.max(0, budget.amount - categoryExpenses)
+      }, 0)
+      
+      return { budgetCategories, totalRemaining }
+    }
+  }
+  
+  const { budgetCategories, totalRemaining } = getBudgetCategoriesAndTotal()
 
   const expensesByCategory = expenses.reduce((acc, expense) => {
     acc[expense.category] = (acc[expense.category] || 0) + expense.amount
@@ -159,6 +307,18 @@ export default function Dashboard() {
     date,
     amount
   })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  // Show loading state for the entire dashboard initially
+  if (loading && grants.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-gray-500 mb-2">Loading dashboard...</div>
+          <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -198,7 +358,7 @@ export default function Dashboard() {
       {/* Budget Remaining Visualization */}
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium">Budget Remaining by Category</h3>
+          <h3 className="text-lg font-medium">Grant Balance</h3>
           <div className="flex items-center space-x-4">
             <select
               value={selectedGrantId}
@@ -206,13 +366,14 @@ export default function Dashboard() {
               className="border border-gray-300 rounded-md px-3 py-2 text-sm"
             >
               <option value="">Select a grant</option>
+              <option value="all">All Grants</option>
               {grants.map(grant => (
                 <option key={grant.id} value={grant.id}>
                   {grant.title} ({grant.agency})
                 </option>
               ))}
             </select>
-            {selectedGrant && (
+            {(selectedGrant || selectedGrantId === 'all') && (
               <div className="text-sm text-gray-600">
                 Total Remaining: <span className="font-semibold text-green-600">${totalRemaining.toLocaleString()}</span>
               </div>
@@ -220,7 +381,7 @@ export default function Dashboard() {
           </div>
         </div>
         
-        {selectedGrant ? (
+        {(selectedGrant || selectedGrantId === 'all') ? (
           budgetCategories.length > 0 ? (
             budgetTimelineData.length > 0 ? (
               <ResponsiveContainer width="100%" height={400}>
@@ -243,6 +404,79 @@ export default function Dashboard() {
                     }}
                     labelFormatter={(label) => `Date: ${label}`}
                   />
+                  <Legend 
+                    verticalAlign="top"
+                    height={60}
+                    iconType="plainline"
+                    wrapperStyle={{ paddingBottom: '20px' }}
+                    content={(props) => {
+                      if (!props.payload) return null
+                      return (
+                        <div className="flex flex-wrap justify-center gap-4 mb-4">
+                          {props.payload.map((entry, index) => {
+                            const strokeDashArrays = [
+                              '0',        // solid line
+                              '5 5',      // dashed line
+                              '10 5',     // longer dash
+                              '3 3',      // dotted line
+                              '15 5 5 5', // dash-dot pattern
+                              '20 5',     // long dash
+                              '8 4 2 4',  // dash-dot-dash pattern
+                              '12 3 3 3', // custom pattern
+                            ]
+                            const shapeTypes = ['circle', 'square', 'triangle', 'diamond', 'star', 'cross', 'plus', 'pentagon']
+                            return (
+                              <div key={index} className="flex items-center gap-2">
+                                <svg width="24" height="12">
+                                  <line 
+                                    x1="2" 
+                                    y1="6" 
+                                    x2="16" 
+                                    y2="6" 
+                                    stroke={entry.color} 
+                                    strokeWidth="2"
+                                    strokeDasharray={strokeDashArrays[index % strokeDashArrays.length]}
+                                  />
+                                  {/* Custom markers based on shape type */}
+                                  {shapeTypes[index % shapeTypes.length] === 'circle' && (
+                                    <circle cx="20" cy="6" r="3" fill={entry.color} />
+                                  )}
+                                  {shapeTypes[index % shapeTypes.length] === 'square' && (
+                                    <rect x="17" y="3" width="6" height="6" fill={entry.color} />
+                                  )}
+                                  {shapeTypes[index % shapeTypes.length] === 'triangle' && (
+                                    <polygon points="20,3 17,9 23,9" fill={entry.color} />
+                                  )}
+                                  {shapeTypes[index % shapeTypes.length] === 'diamond' && (
+                                    <polygon points="20,2 23,6 20,10 17,6" fill={entry.color} />
+                                  )}
+                                  {shapeTypes[index % shapeTypes.length] === 'star' && (
+                                    <polygon points="20,2 21,5 24,5 22,7 23,10 20,8 17,10 18,7 16,5 19,5" fill={entry.color} />
+                                  )}
+                                  {shapeTypes[index % shapeTypes.length] === 'cross' && (
+                                    <g>
+                                      <line x1="20" y1="3" x2="20" y2="9" stroke={entry.color} strokeWidth="2"/>
+                                      <line x1="17" y1="6" x2="23" y2="6" stroke={entry.color} strokeWidth="2"/>
+                                    </g>
+                                  )}
+                                  {shapeTypes[index % shapeTypes.length] === 'plus' && (
+                                    <g>
+                                      <line x1="20" y1="3" x2="20" y2="9" stroke={entry.color} strokeWidth="3"/>
+                                      <line x1="17" y1="6" x2="23" y2="6" stroke={entry.color} strokeWidth="3"/>
+                                    </g>
+                                  )}
+                                  {shapeTypes[index % shapeTypes.length] === 'pentagon' && (
+                                    <polygon points="20,2 23,5 22,9 18,9 17,5" fill={entry.color} />
+                                  )}
+                                </svg>
+                                <span className="text-sm text-gray-700">{entry.value}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    }}
+                  />
                   {budgetCategories.map((budget, index) => {
                     const colors = [
                       '#3B82F6', // blue
@@ -254,6 +488,57 @@ export default function Dashboard() {
                       '#F97316', // orange
                       '#84CC16', // lime
                     ]
+                    
+                    const strokeDashArrays = [
+                      '0',        // solid line
+                      '5 5',      // dashed line
+                      '10 5',     // longer dash
+                      '3 3',      // dotted line
+                      '15 5 5 5', // dash-dot pattern
+                      '20 5',     // long dash
+                      '8 4 2 4',  // dash-dot-dash pattern
+                      '12 3 3 3', // custom pattern
+                    ]
+                    
+                    // Custom dot component for different shapes
+                    const CustomDot = (props: any) => {
+                      const { cx, cy } = props
+                      const shapeTypes = ['circle', 'square', 'triangle', 'diamond', 'star', 'cross', 'plus', 'pentagon']
+                      const shapeType = shapeTypes[index % shapeTypes.length]
+                      const color = colors[index % colors.length]
+                      
+                      switch (shapeType) {
+                        case 'circle':
+                          return <circle cx={cx} cy={cy} r="4" fill={color} />
+                        case 'square':
+                          return <rect x={cx - 3} y={cy - 3} width="6" height="6" fill={color} />
+                        case 'triangle':
+                          return <polygon points={`${cx},${cy-4} ${cx-4},${cy+3} ${cx+4},${cy+3}`} fill={color} />
+                        case 'diamond':
+                          return <polygon points={`${cx},${cy-4} ${cx+3},${cy} ${cx},${cy+4} ${cx-3},${cy}`} fill={color} />
+                        case 'star':
+                          return <polygon points={`${cx},${cy-4} ${cx+1},${cy-1} ${cx+4},${cy-1} ${cx+2},${cy+1} ${cx+3},${cy+4} ${cx},${cy+2} ${cx-3},${cy+4} ${cx-2},${cy+1} ${cx-4},${cy-1} ${cx-1},${cy-1}`} fill={color} />
+                        case 'cross':
+                          return (
+                            <g>
+                              <line x1={cx} y1={cy-3} x2={cx} y2={cy+3} stroke={color} strokeWidth="2"/>
+                              <line x1={cx-3} y1={cy} x2={cx+3} y2={cy} stroke={color} strokeWidth="2"/>
+                            </g>
+                          )
+                        case 'plus':
+                          return (
+                            <g>
+                              <line x1={cx} y1={cy-3} x2={cx} y2={cy+3} stroke={color} strokeWidth="3"/>
+                              <line x1={cx-3} y1={cy} x2={cx+3} y2={cy} stroke={color} strokeWidth="3"/>
+                            </g>
+                          )
+                        case 'pentagon':
+                          return <polygon points={`${cx},${cy-3} ${cx+3},${cy-1} ${cx+2},${cy+3} ${cx-2},${cy+3} ${cx-3},${cy-1}`} fill={color} />
+                        default:
+                          return <circle cx={cx} cy={cy} r="4" fill={color} />
+                      }
+                    }
+                    
                     return (
                       <Line
                         key={budget.id}
@@ -261,8 +546,10 @@ export default function Dashboard() {
                         dataKey={budget.category}
                         stroke={colors[index % colors.length]}
                         strokeWidth={2}
-                        dot={{ r: 3 }}
+                        strokeDasharray={strokeDashArrays[index % strokeDashArrays.length]}
+                        dot={<CustomDot />}
                         connectNulls={false}
+                        name={budget.category}
                       />
                     )
                   })}
@@ -276,7 +563,7 @@ export default function Dashboard() {
             )
           ) : (
             <div className="text-center py-8 text-gray-500">
-              <p>No budget categories available for this grant.</p>
+              <p>No budget categories available{selectedGrantId === 'all' ? ' across all grants' : ' for this grant'}.</p>
               <p className="text-sm mt-1">Add budget categories to see the visualization.</p>
             </div>
           )
@@ -287,7 +574,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-medium mb-4">Expenses Over Time</h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -313,7 +600,7 @@ export default function Dashboard() {
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </div> */}
 
       
 
